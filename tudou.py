@@ -19,7 +19,7 @@ def tudou_download_by_iid(iid, title, merge=True):
 	download_urls([url], title, 'flv', total_size=None, merge=merge)
 
 def tudou_download_by_id(id, title, merge=True):
-	html = get_html('http://www.tudou.com/programs/view/%s/' % id)
+	html = get_html('http://www.tudou.com/programs/view/%s/' % id).decode('gb18030')
 	iid = r1(r'iid\s*=\s*(\S+)', html)
 	tudou_download_by_iid(iid, title, merge=merge)
 
@@ -63,7 +63,7 @@ def tudou_download_playlist(url, create_dir=False, merge=True):
 		raise NotImplementedError('please report a bug so I can implement this')
 	videos = parse_playlist(url)
 	for i, (title, id) in enumerate(videos):
-		print 'Downloading %s of %s videos...' % (i + 1, len(videos))
+		print('Downloading %s of %s videos...' % (i + 1, len(videos)))
 		tudou_download_by_iid(id, title, merge=merge)
 
 download = tudou_download

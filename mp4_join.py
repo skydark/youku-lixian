@@ -7,13 +7,14 @@
 ##################################################
 
 import struct
-from cStringIO import StringIO
+from portable import StringIO, B, is_str, to_bytes
+from portable import zip, filter, map
 
 def skip(stream, n):
 	stream.seek(stream.tell() + n)
 
 def skip_zeros(stream, n):
-	assert stream.read(n) == '\x00' * n
+	assert stream.read(n) == B('\x00') * n
 
 def read_int(stream):
 	return struct.unpack('>i', stream.read(4))[0]
@@ -42,7 +43,7 @@ def copy_stream(source, target, n):
 		target.write(s)
 		n -= to_read
 
-class Atom:
+class Atom(object):
 	def __init__(self, type, size, body):
 		assert len(type) == 4
 		self.type = type
@@ -55,9 +56,9 @@ class Atom:
 		return str(self)
 	def write1(self, stream):
 		write_uint(stream, self.size)
-		stream.write(self.type)
+		stream.write(to_bytes(self.type))
 	def write(self, stream):
-		assert type(self.body) == str, '%s: %s' % (self.type, type(self.body))
+		assert is_str(self.body), '%s: %s' % (self.type, type(self.body))
 		assert self.size == 8 + len(self.body)
 		self.write1(stream)
 		stream.write(self.body)
@@ -92,7 +93,7 @@ class CompositeAtom(Atom):
 
 class VariableAtom(Atom):
 	def __init__(self, type, size, body, variables):
-		assert isinstance(body, str)
+		assert is_str(body)
 		Atom.__init__(self, type, size, body)
 		self.variables = variables
 	def write(self, stream):
@@ -153,7 +154,7 @@ def read_mvhd(stream, size, left, type):
 
 	qt_preferred_fate = read_uint(stream)
 	qt_preferred_volume = read_ushort(stream)
-	assert stream.read(10) == '\x00' * 10
+	assert stream.read(10) == B('\x00') * 10
 	qt_matrixA = read_uint(stream)
 	qt_matrixB = read_uint(stream)
 	qt_matrixU = read_uint(stream)
@@ -183,15 +184,15 @@ def read_tkhd(stream, size, left, type):
 	creation_time = read_uint(stream)
 	modification_time = read_uint(stream)
 	track_id = read_uint(stream)
-	assert stream.read(4) == '\x00' * 4
+	assert stream.read(4) == B('\x00') * 4
 	duration = read_uint(stream)
 	left -= 20
 
-	assert stream.read(8) == '\x00' * 8
+	assert stream.read(8) == B('\x00') * 8
 	qt_layer = read_ushort(stream)
 	qt_alternate_group = read_ushort(stream)
 	qt_volume = read_ushort(stream)
-	assert stream.read(2) == '\x00\x00'
+	assert stream.read(2) == B('\x00\x00')
 	qt_matrixA = read_uint(stream)
 	qt_matrixB = read_uint(stream)
 	qt_matrixU = read_uint(stream)
@@ -241,7 +242,7 @@ def read_hdlr(stream, size, left, type):
 	left -= 20
 
 	track_name = stream.read(left - 1)
-	assert stream.read(1) == '\x00'
+	assert stream.read(1) == B('\x00')
 
 	return Atom('hdlr', size, body)
 
@@ -301,12 +302,12 @@ def read_avc1(stream, size, left, type):
 	height = read_ushort(stream)
 	horizontal_rez = read_uint(stream) >> 16
 	vertical_rez = read_uint(stream) >> 16
-	assert stream.read(4) == '\x00' * 4
+	assert stream.read(4) == B('\x00') * 4
 	frame_count = read_ushort(stream)
 	string_len = read_byte(stream)
 	compressor_name = stream.read(31)
 	depth = read_ushort(stream)
-	assert stream.read(2) == '\xff\xff'
+	assert stream.read(2) == b'\xff\xff'
 	left -= 78
 
 	child = read_atom(stream)
@@ -521,7 +522,7 @@ def read_smhd(stream, size, left, type):
 	left -= 4
 
 	balance = read_ushort(stream)
-	assert stream.read(2) == '\x00\x00'
+	assert stream.read(2) == B('\x00\x00')
 	left -= 4
 
 	assert left == 0
@@ -530,14 +531,14 @@ def read_smhd(stream, size, left, type):
 def read_mp4a(stream, size, left, type):
 	body, stream = read_body_stream(stream, left)
 
-	assert stream.read(6) == '\x00' * 6
+	assert stream.read(6) == B('\x00') * 6
 	data_reference_index = read_ushort(stream)
-	assert stream.read(8) == '\x00' * 8
+	assert stream.read(8) == B('\x00') * 8
 	channel_count = read_ushort(stream)
 	sample_size = read_ushort(stream)
-	assert stream.read(4) == '\x00' * 4
+	assert stream.read(4) == B('\x00') * 4
 	time_scale = read_ushort(stream)
-	assert stream.read(2) == '\x00' * 2
+	assert stream.read(2) == B('\x00') * 2
 	left -= 28
 
 	atom = read_atom(stream)
@@ -653,7 +654,7 @@ def read_atom(stream):
 	size = struct.unpack('>I', header[:4])[0]
 	assert size > 0
 	n += 4
-	type = header[4:8]
+	type = header[4:8].decode('utf8')
 	n += 4
 	assert type != 'uuid'
 	if size == 1:
@@ -872,19 +873,19 @@ def concat_mp4s(mp4s, output=None):
 	elif os.path.isdir(output):
 		output = os.path.join(output, guess_output(mp4s))
 
-	print 'Joining %s into %s' % (', '.join(mp4s), output)
+	print('Joining %s into %s' % (', '.join(mp4s), output))
 	merge_mp4s(mp4s, output)
 
 	return output
 
 def usage():
-	print 'python mp4_join.py --output target.mp4 mp4...'
+	print('python mp4_join.py --output target.mp4 mp4...')
 
 def main():
 	import sys, getopt
 	try:
 		opts, args = getopt.getopt(sys.argv[1:], "ho:", ["help", "output="])
-	except getopt.GetoptError, err:
+	except getopt.GetoptError as err:
 		usage()
 		sys.exit(1)
 	output = None

@@ -3,13 +3,13 @@
 
 __all__ = ['youku_download', 'youku_download_playlist', 'youku_download_by_id']
 
-import urllib2
 import json
 from random import randint
 from time import time
 import re
 import sys
 from common import *
+from portable import U, B, to_unicode, to_bytes
 
 def find_video_id_from_url(url):
 	patterns = [r'^http://v.youku.com/v_show/id_([\w=]+).html',
@@ -32,22 +32,22 @@ def youku_url(url):
 	raise Exception('Invalid youku URL: '+url)
 
 def trim_title(title):
-	title = title.replace(u' - 视频 - 优酷视频 - 在线观看', '')
-	title = title.replace(u' - 专辑 - 优酷视频', '')
-	title = re.sub(ur'—([^—]+)—优酷网，视频高清在线观看', '', title)
+	title = title.replace(U(' - \u89c6\u9891 - \u4f18\u9177\u89c6\u9891 - \u5728\u7ebf\u89c2\u770b'), '').strip()
+	title = title.replace(U(' - \u4e13\u8f91 - \u4f18\u9177\u89c6\u9891'), '').strip()
+	title = re.sub(U('—([^—]+)\u2014\u4f18\u9177\u7f51\uff0c\u89c6\u9891\u9ad8\u6e05\u5728\u7ebf\u89c2\u770b'), '', title)
 	return title
 
 def parse_video_title(url, page):
 	if re.search(r'v_playlist', url):
 		# if we are playing a viedo from play list, the meta title might be incorrect
-		title = r1_of([r'<div class="show_title" title="([^"]+)">[^<]', r'<title>([^<>]*)</title>'], page).decode('utf-8')
+		title = to_unicode(r1_of([r'<div class="show_title" title="([^"]+)"', r'<title>([^<>]*)</title>'], page))
 	else:
-		title = r1_of([r'<div class="show_title" title="([^"]+)">[^<]', r'<meta name="title" content="([^"]*)"'], page).decode('utf-8')
+		title = to_unicode(r1_of([r'<div class="show_title" title="([^"]+)"', r'<meta name="title" content="([^"]*)"'], page))
 	assert title
 	title = trim_title(title)
 	if re.search(r'v_playlist', url) and re.search(r'-.*\S+', title):
 		title = re.sub(r'^[^-]+-\s*', '', title) # remove the special name from title for playlist video
-	title = re.sub(ur'—专辑：.*', u'', title) # remove the special name from title for playlist video
+	title = re.sub(U('—专辑：.*'), U(''), title) # remove the special name from title for playlist video
 	title = unescape_html(title)
 
 	subtitle = re.search(r'<span class="subtitle" id="subtitle">([^<>]*)</span>', page)
@@ -64,23 +64,23 @@ def parse_playlist_title(url, page):
 		# if we are playing a viedo from play list, the meta title might be incorrect
 		title = re.search(r'<title>([^<>]*)</title>', page).group(1).decode('utf-8')
 	else:
-		title = re.search(r'<meta name="title" content="([^"]*)"', page).group(1).decode('utf-8')
+		title = to_unicode(re.search(r'<meta name="title" content="([^"]*)">', page).group(1))
 	title = trim_title(title)
 	if re.search(r'v_playlist', url) and re.search(r'-.*\S+', title):
-		title = re.sub(ur'^[^-]+-\s*', u'', title)
-	title = re.sub(ur'^.*—专辑：《(.+)》', ur'\1', title)
+		title = re.sub(U(r'^[^-]+-\s*'), U(''), title)
+	title = re.sub(U(r'^.*—专辑：《(.+)》'), U(r'\1'), title)
 	title = unescape_html(title)
 	return title
 
 def parse_page(url):
 	url = youku_url(url)
-	page = get_html(url)
+	page = get_html(url).decode('utf-8')
 	id2 = re.search(r"var\s+videoId2\s*=\s*'(\S+)'", page).group(1)
 	title = parse_video_title(url, page)
 	return id2, title
 
 def get_info(videoId2):
-	return json.loads(get_html('http://v.youku.com/player/getPlayList/VideoIDS/'+videoId2))
+	return json.loads(get_decoded_html('http://v.youku.com/player/getPlayList/VideoIDS/'+videoId2))
 
 def find_video(info, stream_type=None):
 	#key = '%s%x' % (info['data'][0]['key2'], int(info['data'][0]['key1'], 16) ^ 0xA55AA5A5)
@@ -129,9 +129,7 @@ def youku_download_by_id(id2, title, output_dir='.', stream_type=None, merge=Tru
 
 def youku_download(url, output_dir='', stream_type=None, merge=True):
 	id2, title = parse_page(url)
-	if type(title) == unicode:
-		title = title.encode(default_encoding)
-		title = title.replace('?', '-')
+	title = to_bytes(title).replace(B('?'), B('-'))
 	youku_download_by_id(id2, title, output_dir, merge=merge)
 
 def parse_playlist_videos(html):
@@ -189,7 +187,7 @@ def youku_download_playlist(url, create_dir=False, merge=True):
 			os.makedirs(title)
 		output_dir = title
 	for i, id in enumerate(ids):
-		print 'Downloading %s of %s videos...' % (i + 1, len(ids))
+		print('Downloading %s of %s videos...' % (i + 1, len(ids)))
 		youku_download(id, output_dir=output_dir, merge=merge)
 
 download = youku_download

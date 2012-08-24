@@ -1,18 +1,10 @@
 
-import urllib2
 import os.path
 import sys
 import re
 
-default_encoding = sys.getfilesystemencoding()
-if default_encoding.lower() == 'ascii':
-	default_encoding = 'utf-8'
+from portable import urlopen, Request, to_bytes, to_unicode
 
-def to_native_string(s):
-	if type(s) == unicode:
-		return s.encode(default_encoding)
-	else:
-		return s
 
 def r1(pattern, text):
 	m = re.search(pattern, text)
@@ -26,13 +18,14 @@ def r1_of(patterns, text):
 			return x
 
 def unescape_html(html):
+	# assert is_unicode(html)
 	import xml.sax.saxutils
 	html = xml.sax.saxutils.unescape(html)
 	html = re.sub(r'&#(\d+);', lambda x: unichr(int(x.group(1))), html)
 	return html
 
 def ungzip(s):
-	from StringIO import StringIO
+	from portable import StringIO
 	import gzip
 	buffer = StringIO(s)
 	f = gzip.GzipFile(fileobj=buffer)
@@ -43,7 +36,7 @@ def undeflate(s):
 	return zlib.decompress(s, -zlib.MAX_WBITS)
 
 def get_response(url):
-	response = urllib2.urlopen(url)
+	response = urlopen(url)
 	data = response.read()
 	if response.info().get('Content-Encoding') == 'gzip':
 		data = ungzip(data)
@@ -65,26 +58,26 @@ def get_decoded_html(url):
 	if charset:
 		return data.decode(charset)
 	else:
-		return data
+		return to_unicode(data)
 
 def url_save(url, filepath, bar, refer=None):
 	headers = {}
 	if refer:
 		headers['Referer'] = refer
-	request = urllib2.Request(url, headers=headers)
-	response = urllib2.urlopen(request)
+	request = Request(url, headers=headers)
+	response = urlopen(request)
 	file_size = int(response.headers['content-length'])
 	assert file_size
 	if os.path.exists(filepath):
 		if file_size == os.path.getsize(filepath):
 			if bar:
 				bar.done()
-			print 'Skip %s: file already exists' % os.path.basename(filepath)
+			print('Skip %s: file already exists' % os.path.basename(filepath))
 			return
 		else:
 			if bar:
 				bar.done()
-			print 'Overwriting', os.path.basename(filepath), '...'
+			print('Overwriting %s ...' % os.path.basename(filepath))
 	with open(filepath, 'wb') as output:
 		received = 0
 		while True:
@@ -98,14 +91,14 @@ def url_save(url, filepath, bar, refer=None):
 	assert received == file_size == os.path.getsize(filepath), '%s == %s == %s' % (received, file_size, os.path.getsize(filepath))
 
 def url_size(url):
-	request = urllib2.Request(url)
+	request = Request(url)
 	request.get_method = lambda: 'HEAD'
-	response = urllib2.urlopen(request)
+	response = urlopen(request)
 	size = int(response.headers['content-length'])
 	return size
 
 def url_size(url):
-	size = int(urllib2.urlopen(url).headers['content-length'])
+	size = int(urlopen(url).headers['content-length'])
 	return size
 
 def urls_size(urls):
@@ -145,7 +138,7 @@ class SimpleProgressBar:
 		self.current_piece = n
 	def done(self):
 		if self.displayed:
-			print
+			print('')
 			self.displayed = False
 
 class PiecesProgressBar:
@@ -167,7 +160,7 @@ class PiecesProgressBar:
 		self.current_piece = n
 	def done(self):
 		if self.displayed:
-			print
+			print('')
 			self.displayed = False
 
 class DummyProgressBar:
@@ -181,6 +174,7 @@ class DummyProgressBar:
 		pass
 
 def escape_file_path(path):
+	path = to_unicode(path)
 	path = path.replace('/', '-')
 	path = path.replace('\\', '-')
 	path = path.replace('*', '-')
@@ -190,6 +184,8 @@ def escape_file_path(path):
 def download_urls(urls, title, ext, total_size, output_dir='.', refer=None, merge=True):
 	assert urls
 	assert ext in ('flv', 'mp4')
+	title = to_unicode(title)
+	output_dir = to_unicode(output_dir)
 	if not total_size:
 		try:
 			total_size = urls_size(urls)
@@ -198,30 +194,31 @@ def download_urls(urls, title, ext, total_size, output_dir='.', refer=None, merg
 			import sys
 			traceback.print_exc(file=sys.stdout)
 			pass
+	to_native_string = to_bytes
 	title = to_native_string(title)
 	title = escape_file_path(title)
 	filename = '%s.%s' % (title, ext)
 	filepath = os.path.join(output_dir, filename)
 	if total_size:
 		if os.path.exists(filepath) and os.path.getsize(filepath) >= total_size * 0.9:
-			print 'Skip %s: file already exists' % filepath
+			print('Skip %s: file already exists' % filepath)
 			return
 		bar = SimpleProgressBar(total_size, len(urls))
 	else:
 		bar = PiecesProgressBar(total_size, len(urls))
 	if len(urls) == 1:
 		url = urls[0]
-		print 'Downloading %s ...' % filename
+		print('Downloading %s ...' % filename)
 		url_save(url, filepath, bar, refer=refer)
 		bar.done()
 	else:
 		flvs = []
-		print 'Downloading %s.%s ...' % (title, ext)
+		print('Downloading %s.%s ...' % (title, ext))
 		for i, url in enumerate(urls):
 			filename = '%s[%02d].%s' % (title, i, ext)
 			filepath = os.path.join(output_dir, filename)
 			flvs.append(filepath)
-			#print 'Downloading %s [%s/%s]...' % (filename, i+1, len(urls))
+			#print('Downloading %s [%s/%s]...' % (filename, i+1, len(urls)))
 			bar.update_piece(i+1)
 			url_save(url, filepath, bar, refer=refer)
 		bar.done()
@@ -238,7 +235,7 @@ def download_urls(urls, title, ext, total_size, output_dir='.', refer=None, merg
 			for flv in flvs:
 				os.remove(flv)
 		else:
-			print "Can't join %s files" % ext
+			print("Can't join %s files" % ext)
 
 def playlist_not_supported(name):
 	def f(*args, **kwargs):
@@ -257,15 +254,15 @@ def script_main(script_name, download, download_playlist=None):
 	import sys, getopt
 	try:
 		opts, args = getopt.getopt(sys.argv[1:], short_opts, opts)
-	except getopt.GetoptError, err:
-		print help
+	except getopt.GetoptError as err:
+		print(help)
 		sys.exit(1)
 	playlist = False
 	create_dir = False
 	merge = True
 	for o, a in opts:
 		if o in ('-h', '--help'):
-			print help
+			print(help)
 			sys.exit()
 		elif o in ('--playlist',):
 			playlist = True
@@ -274,10 +271,10 @@ def script_main(script_name, download, download_playlist=None):
 		elif o in ('--no-merge'):
 			merge = False
 		else:
-			print help
+			print(help)
 			sys.exit(1)
 	if not args:
-		print help
+		print(help)
 		sys.exit(1)
 
 	for url in args:

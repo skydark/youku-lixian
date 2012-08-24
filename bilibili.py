@@ -7,6 +7,7 @@ from common import *
 from iask import iask_download_by_id
 from youku import youku_download_by_id
 from tudou import tudou_download_by_id
+from portable import B, open, raw_input
 
 def get_srt_xml(id):
 	url = 'http://comment.bilibili.tv/%s.xml' % id
@@ -63,13 +64,20 @@ def bilibili_download_by_cid(id, title, merge=True):
 
 def bilibili_download(url, merge=True):
 	assert re.match(r'http://(www.bilibili.tv|bilibili.kankanews.com|bilibili.smgbb.cn)/video/av(\d+)', url)
-	html = get_html(url)
+	html = get_html(url).decode('utf-8')
+	manual = False
 
-	title = r1(r'<h2>([^<>]+)</h2>', html).decode('utf-8')
+	title = r1(r'<h2>([^<>]+)</h2>', html)
+	if title is None and raw_input('If you need to process manual, enter y:') == 'y':
+		title = raw_input('Title: ')
+		manual = True
 	title = unescape_html(title)
 	title = escape_file_path(title)
 
-	flashvars = r1_of([r'flashvars="([^"]+)"', r'"https://secure.bilibili.tv/secure,(cid=\d+)(?:&aid=\d+)?"'], html)
+	if manual:
+		flashvars = raw_input('flashvars:')
+	else:
+		flashvars = r1_of([r'flashvars="([^"]+)"', r'"https://secure.bilibili.tv/secure,(cid=\d+)(?:&aid=\d+)?"'], html)
 	assert flashvars
 	t, id = flashvars.split('=', 1)
 	id = id.split('&')[0]
@@ -85,8 +93,8 @@ def bilibili_download(url, merge=True):
 		raise NotImplementedError(flashvars)
 
 	xml = get_srt_xml(id)
-	with open(title + '.xml', 'w') as x:
-		x.write(xml.encode('utf-8'))
+	with open(title + '.xml', 'w', encoding='utf-8') as x:
+		x.write(xml)
 
 download = bilibili_download
 download_playlist = playlist_not_supported('bilibili')

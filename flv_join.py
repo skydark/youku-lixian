@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import struct
-from cStringIO import StringIO
+from portable import StringIO, unistr, B
 
 TAG_TYPE_METADATA = 18
 
@@ -63,7 +63,7 @@ def read_amf_boolean(stream):
 
 def read_amf_string(stream):
 	xx = stream.read(2)
-	if xx == '':
+	if xx == B(''):
 		# dirty fix for the invalid Qiyi flv
 		return None
 	n = struct.unpack('>H', xx)[0]
@@ -122,9 +122,9 @@ def write_amf_number(stream, v):
 
 def write_amf_boolean(stream, v):
 	if v:
-		stream.write('\x01')
+		stream.write(B('\x01'))
 	else:
-		stream.write('\x00')
+		stream.write(B('\x00'))
 
 def write_amf_string(stream, s):
 	s = s.encode('utf-8')
@@ -154,7 +154,7 @@ def write_amf_array(stream, o):
 amf_writers_tags = {
 		float: AMF_TYPE_NUMBER,
 		bool: AMF_TYPE_BOOLEAN,
-		unicode: AMF_TYPE_STRING,
+		unistr: AMF_TYPE_STRING,
 		dict: AMF_TYPE_OBJECT,
 		ECMAObject: AMF_TYPE_MIXED_ARRAY,
 		list: AMF_TYPE_ARRAY,
@@ -194,7 +194,7 @@ def read_byte(stream):
 	return ord(stream.read(1))
 
 def write_byte(stream, b):
-	stream.write(chr(b))
+	stream.write(struct.pack('B', b))
 
 def read_unsigned_medium_int(stream):
 	x1, x2, x3 = struct.unpack('BBB', stream.read(3))
@@ -236,11 +236,11 @@ def write_tag(stream, tag):
 	write_byte(stream, timestamp>>8  & 0xff)
 	write_byte(stream, timestamp     & 0xff)
 	write_byte(stream, timestamp>>24 & 0xff)
-	stream.write('\0\0\0')
+	stream.write(B('\0\0\0'))
 	stream.write(body)
 
 def read_flv_header(stream):
-	assert stream.read(3) == 'FLV'
+	assert stream.read(3) == B('FLV')
 	header_version = read_byte(stream)
 	assert header_version == 1
 	type_flags = read_byte(stream)
@@ -249,7 +249,7 @@ def read_flv_header(stream):
 	assert data_offset == 9
 
 def write_flv_header(stream):
-	stream.write('FLV')
+	stream.write(B('FLV'))
 	write_byte(stream, 1)
 	write_byte(stream, 5)
 	write_uint(stream, 9)
@@ -300,7 +300,7 @@ def concat_flvs(flvs, output=None):
 	elif os.path.isdir(output):
 		output = os.path.join(output, guess_output(flvs))
 
-	print 'Joining %s into %s' % (', '.join(flvs), output)
+	print('Joining %s into %s' % (', '.join(flvs), output))
 	ins = [open(flv, 'rb') for flv in flvs]
 	for stream in ins:
 		read_flv_header(stream)
@@ -336,13 +336,13 @@ def concat_flvs(flvs, output=None):
 	return output
 
 def usage():
-	print 'python flv_join.py --output target.flv flv...'
+	print('python flv_join.py --output target.flv flv...')
 
 def main():
 	import sys, getopt
 	try:
 		opts, args = getopt.getopt(sys.argv[1:], "ho:", ["help", "output="])
-	except getopt.GetoptError, err:
+	except getopt.GetoptError as err:
 		usage()
 		sys.exit(1)
 	output = None
