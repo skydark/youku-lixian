@@ -9,7 +9,7 @@ from youku import youku_download_by_id
 from tudou import tudou_download_by_id
 
 def get_srt_xml(id):
-	url = 'http://comment.bilibili.tv/dm,%s' % id
+	url = 'http://comment.bilibili.tv/%s.xml' % id
 	return get_html(url).decode('utf-8')
 
 def parse_srt_p(p):
@@ -62,6 +62,10 @@ def bilibili_download(url, merge=True):
 		youku_download_by_id(id, title, merge=merge)
 	elif t == 'uid':
 		tudou_download_by_id(id, title, merge=merge)
+	elif t == 'cid':
+		xml = get_html('http://interface.bilibili.tv/playurl?cid=%s' % id, encoding='utf8')
+		urls = re.findall(r'<url>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</url>', xml)
+		download_urls(urls, title, 'flv', total_size=None, merge=merge)
 	else:
 		raise NotImplementedError(flashvars)
 
